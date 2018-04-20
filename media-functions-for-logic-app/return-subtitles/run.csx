@@ -133,6 +133,10 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
                 error = "Asset not found"
             });
         }
+        
+        IAccessPolicy readPolicy = _context.AccessPolicies.Create("readPolicy",
+        TimeSpan.FromHours(4), AccessPermissions.Read);
+        ILocator outputLocator = _context.Locators.CreateLocator(LocatorType.Sas, outputAsset, readPolicy);
 
         var vttSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".VTT")).FirstOrDefault();
         var ttmlSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".TTML")).FirstOrDefault();
