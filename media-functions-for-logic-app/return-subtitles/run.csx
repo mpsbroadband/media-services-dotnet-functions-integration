@@ -60,6 +60,9 @@ static readonly string _mediaservicesClientSecret = Environment.GetEnvironmentVa
 private static CloudMediaContext _context = null;
 private static CloudStorageAccount _destinationStorageAccount = null;
 
+public static string MPPSubtitlesStartTime = "";
+public static string MPPSubtitlesEndTime = "";
+
 
 public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Microsoft.Azure.WebJobs.ExecutionContext execContext)
 {
@@ -94,6 +97,22 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 
     try
     {
+        AADTenantDomain = (string)data.tenantDomain;
+        _RESTAPIEndpoint = (string)data.apiUrl;
+
+        _mediaservicesClientId = (string)data.clientId;
+        _mediaservicesClientSecret = (string)data.clientSecret;
+
+        if ((string.IsNullOrEmpty(_RESTAPIEndpoint)) || (string.IsNullOrEmpty(_mediaservicesClientId)) 
+            || (string.IsNullOrEmpty(_AADTenantDomain)) || (string.IsNullOrEmpty(_mediaservicesClientSecret)))
+        {
+            log.Info("One or AMS parameters are missing");
+            return req.CreateResponse(HttpStatusCode.BadRequest, new
+            {
+                error = "One or AMS parameters are missing"
+            });
+        }
+        
         AzureAdTokenCredentials tokenCredentials = new AzureAdTokenCredentials(_AADTenantDomain,
                             new AzureAdClientSymmetricKey(_mediaservicesClientId, _mediaservicesClientSecret),
                             AzureEnvironments.AzureCloudEnvironment);
@@ -211,6 +230,32 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
         ttmlDocument = ttmlContent,
         ttmlDocumentWithOffset = ttmlContentTimeCorrected,
         vttDocument = vttContent,
-        vttDocumentWithOffset = vttContentTimeCorrected
+        vttDocumentWithOffset = vttContentTimeCorrected,
+        MPPSubtitles = TransformSubtitles(vttContentTimeCorrected),
+        MPPSubtitlesStartTime = MPPSubtitlesStartTime,
+        MPPSubtitlesEndTime = MPPSubtitlesEndTime
     });
+}
+
+//CUSTOM METHOD OF LIVEARENA
+//It transforms subtitles into JSON formed text
+public static string TransformSubtitles(string text)
+{
+    var captionText = "[";
+    var arr = text.Split(new[] { "\r\n\r\n" }, StringSplitOptions.None);
+    for (var i = 1; i < arr.Count() - 1; i++)
+    {
+        var captionData = arr[i].Split(new[] { "-->" }, StringSplitOptions.None);
+        var temp = captionData[1].Split(new[] { "\r\n" }, StringSplitOptions.None);
+        var startTemp = captionData[0].TrimEnd(' ').Split('.');
+        var start = startTemp[1];
+        var endTemp = temp[0].TrimStart(' ').Split('.');
+        var end = endTemp[1];
+        captionText += "{\"start\": \"" + start + "\", \"end\": \"" + end + "\", \"text\": \"" + temp[1] + "\"}, ";
+        if (i == 1) MPPSubtitlesStartTime = start;
+        if (i == arr.Count() - 2) MPPSubtitlesEndTime = end;
+    }
+    captionText = captionText.TrimEnd(' ');
+    captionText = captionText.TrimEnd(',');
+    return captionText + "]";
 }

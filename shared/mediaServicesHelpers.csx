@@ -88,7 +88,7 @@ public static IEnumerable<Uri> GetValidPaths(IAsset asset, string preferredSE = 
 {
     IEnumerable<Uri> ValidURIs;
 
-    var locators = asset.Locators.Where(l => l.Type == LocatorType.OnDemandOrigin && l.ExpirationDateTime > DateTime.UtcNow).OrderByDescending(l => l.ExpirationDateTime);
+    var locators = asset.Locators.Where(l => l.Type == LocatorType.Sas && l.ExpirationDateTime > DateTime.UtcNow).OrderByDescending(l => l.ExpirationDateTime);
 
     //var se = _context.StreamingEndpoints.AsEnumerable().Where(o => (o.State == StreamingEndpointState.Running) && (CanDoDynPackaging(o))).OrderByDescending(o => o.CdnEnabled);
 

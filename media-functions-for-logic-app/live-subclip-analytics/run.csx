@@ -247,6 +247,38 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
         });
     }
 
+    if (data.tenantDomain == null)
+    {
+        return req.CreateResponse(HttpStatusCode.BadRequest, new
+        {
+            error = "Please pass tenant domain in request"
+        });
+    }
+
+    if (data.apiUrl == null)
+    {
+        return req.CreateResponse(HttpStatusCode.BadRequest, new
+        {
+            error = "Please pass api url in request"
+        });
+    }
+
+    if (data.clientId == null)
+    {
+        return req.CreateResponse(HttpStatusCode.BadRequest, new
+        {
+            error = "Please pass client id in request"
+        });
+    }
+
+    if (data.clientSecret == null)
+    {
+        return req.CreateResponse(HttpStatusCode.BadRequest, new
+        {
+            error = "Please pass client secret in request"
+        });
+    }
+
     if (data.intervalSec != null)
     {
         intervalsec = (int)data.intervalSec;
@@ -256,6 +288,22 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 
     try
     {
+        _AADTenantDomain = (string)data.tenantDomain;
+        _RESTAPIEndpoint = (string)data.apiUrl;
+
+        _mediaservicesClientId = (string)data.clientId;
+        _mediaservicesClientSecret = (string)data.clientSecret;
+
+        if ((string.IsNullOrEmpty(_RESTAPIEndpoint)) || (string.IsNullOrEmpty(_mediaservicesClientId)) 
+            || (string.IsNullOrEmpty(_AADTenantDomain)) || (string.IsNullOrEmpty(_mediaservicesClientSecret)))
+        {
+            log.Info("One or AMS parameters are missing");
+            return req.CreateResponse(HttpStatusCode.BadRequest, new
+            {
+                error = "One or AMS parameters are missing"
+            });
+        }
+        
         AzureAdTokenCredentials tokenCredentials = new AzureAdTokenCredentials(_AADTenantDomain,
                             new AzureAdClientSymmetricKey(_mediaservicesClientId, _mediaservicesClientSecret),
                             AzureEnvironments.AzureCloudEnvironment);

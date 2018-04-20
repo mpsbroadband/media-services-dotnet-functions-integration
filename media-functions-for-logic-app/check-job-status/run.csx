@@ -107,6 +107,22 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 
     try
     {
+        _AADTenantDomain = (string)data.tenantDomain;
+        _RESTAPIEndpoint = (string)data.apiUrl;
+
+        _mediaservicesClientId = (string)data.clientId;
+        _mediaservicesClientSecret = (string)data.clientSecret;
+
+        if ((string.IsNullOrEmpty(_RESTAPIEndpoint)) || (string.IsNullOrEmpty(_mediaservicesClientId)) 
+            || (string.IsNullOrEmpty(_AADTenantDomain)) || (string.IsNullOrEmpty(_mediaservicesClientSecret)))
+        {
+            log.Info("One or AMS parameters are missing");
+            return req.CreateResponse(HttpStatusCode.BadRequest, new
+            {
+                error = "One or AMS parameters are missing"
+            });
+        }
+        
         AzureAdTokenCredentials tokenCredentials = new AzureAdTokenCredentials(_AADTenantDomain,
                               new AzureAdClientSymmetricKey(_mediaservicesClientId, _mediaservicesClientSecret),
                               AzureEnvironments.AzureCloudEnvironment);
