@@ -97,7 +97,7 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 
     try
     {
-        AADTenantDomain = (string)data.tenantDomain;
+        _AADTenantDomain = (string)data.tenantDomain;
         _RESTAPIEndpoint = (string)data.apiUrl;
 
         _mediaservicesClientId = (string)data.clientId;
@@ -133,15 +133,11 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
                 error = "Asset not found"
             });
         }
-        
-        IAccessPolicy readPolicy = _context.AccessPolicies.Create("readPolicy",
-        TimeSpan.FromHours(4), AccessPermissions.Read);
-        ILocator outputLocator = _context.Locators.CreateLocator(LocatorType.Sas, outputAsset, readPolicy);
 
         var vttSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".VTT")).FirstOrDefault();
         var ttmlSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".TTML")).FirstOrDefault();
 
-        Uri publishurl = GetValidOnDemandPath(outputAsset);
+        Uri publishurl = GetValidSasPath(outputAsset);
         if (publishurl != null)
         {
             pathUrl = publishurl.ToString();
@@ -262,4 +258,51 @@ public static string TransformSubtitles(string text)
     captionText = captionText.TrimEnd(' ');
     captionText = captionText.TrimEnd(',');
     return captionText + "]";
+}
+
+public static Uri GetValidSasPath(IAsset asset, string preferredSE = null)
+{
+    var aivalidurls = GetPaths(asset, preferredSE);
+    if (aivalidurls != null)
+    {
+        return aivalidurls.FirstOrDefault();
+    }
+    else
+    {
+        return null;
+    }
+}
+
+public static IEnumerable<Uri> GetPaths(IAsset asset, string preferredSE = null)
+{
+    IEnumerable<Uri> ValidURIs;
+
+    var locators = asset.Locators.Where(l => l.Type == LocatorType.Sas && l.ExpirationDateTime > DateTime.UtcNow).OrderByDescending(l => l.ExpirationDateTime);
+
+    if(locators.Count() == 0){
+        IAccessPolicy readPolicy = _context.AccessPolicies.Create("readPolicy",
+        TimeSpan.FromHours(4), AccessPermissions.Read);
+        ILocator outputLocator = _context.Locators.CreateLocator(LocatorType.Sas, outputAsset, readPolicy);
+        locators = asset.Locators.Where(l => l.Type == LocatorType.Sas && l.ExpirationDateTime > DateTime.UtcNow).OrderByDescending(l => l.ExpirationDateTime);
+    }
+    //var se = _context.StreamingEndpoints.AsEnumerable().Where(o => (o.State == StreamingEndpointState.Running) && (CanDoDynPackaging(o))).OrderByDescending(o => o.CdnEnabled);
+
+    var se = _context.StreamingEndpoints.AsEnumerable().Where(o =>
+       (string.IsNullOrEmpty(preferredSE) || (o.Name == preferredSE)) &&
+       (!string.IsNullOrEmpty(preferredSE) || ((o.State == StreamingEndpointState.Running) &&
+       (CanDoDynPackaging(o)))))
+       .OrderByDescending(o => o.CdnEnabled);
+
+    if (seCount == 0) // No running which can do dynpackaging SE and if not preferredSE. Let's use the default one to get URL
+    {
+        se = _context.StreamingEndpoints.AsEnumerable().Where(o => o.Name == "default").OrderByDescending(o => o.CdnEnabled);
+    }
+    
+    var template = new UriTemplate("{contentAccessComponent}/");
+    ValidURIs = locators.SelectMany(l => se.Select(
+                o =>
+                    template.BindByPosition(new Uri("https://" + o.HostName), l.ContentAccessComponent)))
+        .ToArray();
+
+    return ValidURIs;
 }

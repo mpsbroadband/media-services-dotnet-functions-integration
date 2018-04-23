@@ -109,7 +109,7 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 
     try
     {
-        AADTenantDomain = (string)data.tenantDomain;
+        _AADTenantDomain = (string)data.tenantDomain;
         _RESTAPIEndpoint = (string)data.apiUrl;
 
         _mediaservicesClientId = (string)data.clientId;
