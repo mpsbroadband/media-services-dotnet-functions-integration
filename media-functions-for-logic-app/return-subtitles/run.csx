@@ -153,7 +153,11 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
             {
                 vttUrl = pathUrl + vttSubtitle.Name;
             }
-            vttContent = ReturnSubContent(vttSubtitle);
+            vttContent = ReturnSubContent(vttSubtitle, log);
+            if(string.IsNullOrEmpty(vttContent))
+            {
+                log.Info($"VTT content Empty");
+            }
 
             if (data.timeOffset != null) // let's update the ttml with new timecode
             {
@@ -184,7 +188,7 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
             {
                 ttmlUrl = pathUrl + vttSubtitle.Name;
             }
-            ttmlContent = ReturnSubContent(ttmlSubtitle);
+            ttmlContent = ReturnSubContent(ttmlSubtitle, log);
             if (data.timeOffset != null) // let's update the vtt with new timecode
             {
                 var tsoffset = TimeSpan.Parse((string)data.timeOffset);
@@ -307,14 +311,16 @@ public static IEnumerable<Uri> GetPaths(IAsset asset, string preferredSE = null)
     return ValidURIs;
 }
 
-public static string ReturnSubContent(IAssetFile assetFile)
+public static string ReturnSubContent(IAssetFile assetFile, TraceWriter log)
 {
     string datastring = null;
 
     try
     {
         string tempPath = System.IO.Path.GetTempPath();
+        log.Info($"tempPath: {tempPath}");
         string filePath = Path.Combine(tempPath, assetFile.Name);
+        log.Info($"filePath: {filePath}");
 
         if (File.Exists(filePath))
         {
@@ -329,9 +335,9 @@ public static string ReturnSubContent(IAssetFile assetFile)
 
         File.Delete(filePath);
     }
-    catch
+    catch (Exception ex)
     {
-
+        log.Info($"Exception {ex}");
     }
     log.Info($"datastring: {datastring}");
     return datastring;
