@@ -152,9 +152,8 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
             if (publishurl != null)
             {
                 vttUrl = pathUrl + vttSubtitle.Name;
-                log.Info($"vtt url : {vttUrl}");
             }
-            vttContent = ReturnContent(vttSubtitle);
+            vttContent = ReturnSubContent(vttSubtitle);
 
             if (data.timeOffset != null) // let's update the ttml with new timecode
             {
@@ -184,9 +183,8 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
             if (publishurl != null)
             {
                 ttmlUrl = pathUrl + vttSubtitle.Name;
-                log.Info($"ttml url : {ttmlUrl}");
             }
-            ttmlContent = ReturnContent(ttmlSubtitle);
+            ttmlContent = ReturnSubContent(ttmlSubtitle);
             if (data.timeOffset != null) // let's update the vtt with new timecode
             {
                 var tsoffset = TimeSpan.Parse((string)data.timeOffset);
@@ -241,10 +239,12 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 //It transforms subtitles into JSON formed text
 public static string TransformSubtitles(string text)
 {
+    string arrow = " --> ";
     var captionText = "[";
     var arr = text.Split(new[] { "\r\n\r\n" }, StringSplitOptions.None);
     for (var i = 1; i < arr.Count() - 1; i++)
     {
+        if (!arr[i].Contains(arrow)) continue;
         var captionData = arr[i].Split(new[] { "-->" }, StringSplitOptions.None);
         var temp = captionData[1].Split(new[] { "\r\n" }, StringSplitOptions.None);
         var startTemp = captionData[0].TrimEnd(' ').Split('.');
@@ -282,7 +282,7 @@ public static IEnumerable<Uri> GetPaths(IAsset asset, string preferredSE = null)
     if(locators.Count() == 0){
         IAccessPolicy readPolicy = _context.AccessPolicies.Create("readPolicy",
         TimeSpan.FromHours(4), AccessPermissions.Read);
-        ILocator outputLocator = _context.Locators.CreateLocator(LocatorType.Sas, outputAsset, readPolicy);
+        ILocator outputLocator = _context.Locators.CreateLocator(LocatorType.Sas, asset, readPolicy);
         locators = asset.Locators.Where(l => l.Type == LocatorType.Sas && l.ExpirationDateTime > DateTime.UtcNow).OrderByDescending(l => l.ExpirationDateTime);
     }
     //var se = _context.StreamingEndpoints.AsEnumerable().Where(o => (o.State == StreamingEndpointState.Running) && (CanDoDynPackaging(o))).OrderByDescending(o => o.CdnEnabled);
@@ -293,7 +293,7 @@ public static IEnumerable<Uri> GetPaths(IAsset asset, string preferredSE = null)
        (CanDoDynPackaging(o)))))
        .OrderByDescending(o => o.CdnEnabled);
 
-    if (seCount == 0) // No running which can do dynpackaging SE and if not preferredSE. Let's use the default one to get URL
+    if (se.Count() == 0) // No running which can do dynpackaging SE and if not preferredSE. Let's use the default one to get URL
     {
         se = _context.StreamingEndpoints.AsEnumerable().Where(o => o.Name == "default").OrderByDescending(o => o.CdnEnabled);
     }
@@ -305,4 +305,34 @@ public static IEnumerable<Uri> GetPaths(IAsset asset, string preferredSE = null)
         .ToArray();
 
     return ValidURIs;
+}
+
+public static string ReturnSubContent(IAssetFile assetFile)
+{
+    string datastring = null;
+
+    try
+    {
+        string tempPath = System.IO.Path.GetTempPath();
+        string filePath = Path.Combine(tempPath, assetFile.Name);
+
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+        assetFile.Download(filePath);
+
+        StreamReader streamReader = new StreamReader(filePath);
+        Encoding fileEncoding = streamReader.CurrentEncoding;
+        datastring = streamReader.ReadToEnd();
+        streamReader.Close();
+
+        File.Delete(filePath);
+    }
+    catch
+    {
+
+    }
+    log.Info($"datastring: {datastring}");
+    return datastring;
 }
