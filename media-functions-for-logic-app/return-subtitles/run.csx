@@ -50,11 +50,11 @@ using Microsoft.IdentityModel.Clients.ActiveDirectory;
 static string _storageAccountName = Environment.GetEnvironmentVariable("MediaServicesStorageAccountName");
 static string _storageAccountKey = Environment.GetEnvironmentVariable("MediaServicesStorageAccountKey");
 
-static readonly string _AADTenantDomain = Environment.GetEnvironmentVariable("AMSAADTenantDomain");
-static readonly string _RESTAPIEndpoint = Environment.GetEnvironmentVariable("AMSRESTAPIEndpoint");
+public static string _AADTenantDomain = Environment.GetEnvironmentVariable("AMSAADTenantDomain");
+public static string _RESTAPIEndpoint = Environment.GetEnvironmentVariable("AMSRESTAPIEndpoint");
 
-static readonly string _mediaservicesClientId = Environment.GetEnvironmentVariable("AMSClientId");
-static readonly string _mediaservicesClientSecret = Environment.GetEnvironmentVariable("AMSClientSecret");
+public static string _mediaservicesClientId = Environment.GetEnvironmentVariable("AMSClientId");
+public static string _mediaservicesClientSecret = Environment.GetEnvironmentVariable("AMSClientSecret");
 
 // Field for service context.
 private static CloudMediaContext _context = null;
