@@ -93,8 +93,6 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
         });
     }
 
-    log.Info($"Using Azure Media Service Rest API Endpoint : {_RESTAPIEndpoint}");
-
     try
     {
         _AADTenantDomain = (string)data.tenantDomain;
@@ -102,6 +100,8 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 
         _mediaservicesClientId = (string)data.clientId;
         _mediaservicesClientSecret = (string)data.clientSecret;
+        
+        log.Info($"Using Azure Media Service Rest API Endpoint : {_RESTAPIEndpoint}");
 
         if ((string.IsNullOrEmpty(_RESTAPIEndpoint)) || (string.IsNullOrEmpty(_mediaservicesClientId)) 
             || (string.IsNullOrEmpty(_AADTenantDomain)) || (string.IsNullOrEmpty(_mediaservicesClientSecret)))
@@ -134,9 +134,6 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
             });
         }
 
-        var vttSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".VTT")).FirstOrDefault();
-        var ttmlSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".TTML")).FirstOrDefault();
-
         Uri publishurl = GetValidSasPath(outputAsset);
         if (publishurl != null)
         {
@@ -146,6 +143,27 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
         {
             log.Info($"Asset not published");
         }
+        var assetfilescount = outputAsset.AssetFiles.Count();
+        if(assetfilescount == 0)
+        {
+            int loopCount = 0;
+            while(loopCount<100){
+                outputAsset = _context.Assets.Where(a => a.Id == assetid).FirstOrDefault();
+                log.Info($"Number of retries so far: {loopCount}");
+                if(outputAsset.AssetFiles.Count() == 0) {
+                    Thread.Sleep(1000);
+                }
+                else
+                {
+                    break;
+                }
+                loopCount++;
+            }
+            
+        }
+
+        var vttSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".VTT")).FirstOrDefault();
+        //var ttmlSubtitle = outputAsset.AssetFiles.Where(a => a.Name.ToUpper().EndsWith(".TTML")).FirstOrDefault();
 
         if (vttSubtitle != null)
         {
@@ -153,7 +171,7 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
             {
                 vttUrl = pathUrl + vttSubtitle.Name;
             }
-            vttContent = ReturnSubContent(vttSubtitle, log);
+            vttContent = ReturnSubContent(vttSubtitle);
             if(string.IsNullOrEmpty(vttContent))
             {
                 log.Info($"VTT content Empty");
@@ -181,34 +199,41 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
                 vttContentTimeCorrected = sb.ToString();
             }
         }
-
-        if (ttmlSubtitle != null)
+        else
         {
-            if (publishurl != null)
+            return req.CreateResponse(HttpStatusCode.NotFound, new
             {
-                ttmlUrl = pathUrl + vttSubtitle.Name;
-            }
-            ttmlContent = ReturnSubContent(ttmlSubtitle, log);
-            if (data.timeOffset != null) // let's update the vtt with new timecode
-            {
-                var tsoffset = TimeSpan.Parse((string)data.timeOffset);
-                log.Info("tsoffset : " + tsoffset.ToString(@"d\.hh\:mm\:ss\.fff"));
-                XNamespace xmlns = "http://www.w3.org/ns/ttml";
-                XDocument docXML = XDocument.Parse(ttmlContent);
-                var tt = docXML.Element(xmlns + "tt");
-                var subtitles = docXML.Element(xmlns + "tt").Element(xmlns + "body").Element(xmlns + "div").Elements(xmlns + "p");
-                foreach (var sub in subtitles)
-                {
-                    var begin = TimeSpan.Parse((string)sub.Attribute("begin"));
-                    var end = TimeSpan.Parse((string)sub.Attribute("end"));
-                    sub.SetAttributeValue("end", (end + tsoffset).ToString(@"d\.hh\:mm\:ss\.fff"));
-                    sub.SetAttributeValue("begin", (begin + tsoffset).ToString(@"d\.hh\:mm\:ss\.fff"));
-                }
-                ttmlContentTimeCorrected = docXML.Declaration.ToString() + Environment.NewLine + docXML.ToString();
-            }
+                acount = assetfilescount,
+                error = "vtt content not found"
+            });            
         }
+        // if (ttmlSubtitle != null)
+        // {
+        //     if (publishurl != null)
+        //     {
+        //         ttmlUrl = pathUrl + vttSubtitle.Name;
+        //     }
+        //     ttmlContent = ReturnSubContent(ttmlSubtitle);
+        //     if (data.timeOffset != null) // let's update the vtt with new timecode
+        //     {
+        //         var tsoffset = TimeSpan.Parse((string)data.timeOffset);
+        //         log.Info("tsoffset : " + tsoffset.ToString(@"d\.hh\:mm\:ss\.fff"));
+        //         XNamespace xmlns = "http://www.w3.org/ns/ttml";
+        //         XDocument docXML = XDocument.Parse(ttmlContent);
+        //         var tt = docXML.Element(xmlns + "tt");
+        //         var subtitles = docXML.Element(xmlns + "tt").Element(xmlns + "body").Element(xmlns + "div").Elements(xmlns + "p");
+        //         foreach (var sub in subtitles)
+        //         {
+        //             var begin = TimeSpan.Parse((string)sub.Attribute("begin"));
+        //             var end = TimeSpan.Parse((string)sub.Attribute("end"));
+        //             sub.SetAttributeValue("end", (end + tsoffset).ToString(@"d\.hh\:mm\:ss\.fff"));
+        //             sub.SetAttributeValue("begin", (begin + tsoffset).ToString(@"d\.hh\:mm\:ss\.fff"));
+        //         }
+        //         ttmlContentTimeCorrected = docXML.Declaration.ToString() + Environment.NewLine + docXML.ToString();
+        //     }
+        // }
 
-        if (ttmlContent != "" && vttContent != "" && data.deleteAsset != null && ((bool)data.deleteAsset))
+        if (vttContent != "" && data.deleteAsset != null && ((bool)data.deleteAsset))
         // If asset deletion was asked
         {
             outputAsset.Delete();
@@ -223,17 +248,18 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
         });
     }
 
+    var mpp5Subtitles = TransformSubtitles(vttContentTimeCorrected);
     log.Info($"");
     return req.CreateResponse(HttpStatusCode.OK, new
     {
         vttUrl = vttUrl,
         ttmlUrl = ttmlUrl,
         pathUrl = pathUrl,
-        ttmlDocument = ttmlContent,
-        ttmlDocumentWithOffset = ttmlContentTimeCorrected,
+        //ttmlDocument = ttmlContent,
+        //ttmlDocumentWithOffset = ttmlContentTimeCorrected,
         vttDocument = vttContent,
         vttDocumentWithOffset = vttContentTimeCorrected,
-        MPPSubtitles = TransformSubtitles(vttContentTimeCorrected),
+        MPPSubtitles = mpp5Subtitles,
         MPPSubtitlesStartTime = MPPSubtitlesStartTime,
         MPPSubtitlesEndTime = MPPSubtitlesEndTime
     });
@@ -244,20 +270,23 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
 public static string TransformSubtitles(string text)
 {
     string arrow = " --> ";
+    int entryNumber = 0;
     var captionText = "[";
     var arr = text.Split(new[] { "\r\n\r\n" }, StringSplitOptions.None);
     for (var i = 1; i < arr.Count() - 1; i++)
     {
         if (!arr[i].Contains(arrow)) continue;
         var captionData = arr[i].Split(new[] { "-->" }, StringSplitOptions.None);
+        entryNumber++;
         var temp = captionData[1].Split(new[] { "\r\n" }, StringSplitOptions.None);
         var startTemp = captionData[0].TrimEnd(' ').Split('.');
         var start = startTemp[1];
         var endTemp = temp[0].TrimStart(' ').Split('.');
         var end = endTemp[1];
         captionText += "{\"start\": \"" + start + "\", \"end\": \"" + end + "\", \"text\": \"" + temp[1] + "\"}, ";
-        if (i == 1) MPPSubtitlesStartTime = start;
-        if (i == arr.Count() - 2) MPPSubtitlesEndTime = end;
+        if (entryNumber == 1) MPPSubtitlesStartTime = start;
+        //if (i == arr.Count() - 2) 
+        MPPSubtitlesEndTime = end;
     }
     captionText = captionText.TrimEnd(' ');
     captionText = captionText.TrimEnd(',');
@@ -311,16 +340,14 @@ public static IEnumerable<Uri> GetPaths(IAsset asset, string preferredSE = null)
     return ValidURIs;
 }
 
-public static string ReturnSubContent(IAssetFile assetFile, TraceWriter log)
+public static string ReturnSubContent(IAssetFile assetFile)
 {
     string datastring = null;
 
     try
     {
         string tempPath = System.IO.Path.GetTempPath();
-        log.Info($"tempPath: {tempPath}");
         string filePath = Path.Combine(tempPath, assetFile.Name);
-        log.Info($"filePath: {filePath}");
 
         if (File.Exists(filePath))
         {
@@ -335,10 +362,9 @@ public static string ReturnSubContent(IAssetFile assetFile, TraceWriter log)
 
         File.Delete(filePath);
     }
-    catch (Exception ex)
+    catch 
     {
-        log.Info($"Exception {ex}");
+        
     }
-    log.Info($"datastring: {datastring}");
     return datastring;
 }
