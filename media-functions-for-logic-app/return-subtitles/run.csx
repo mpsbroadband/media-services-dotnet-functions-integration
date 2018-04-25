@@ -151,7 +151,7 @@ public static async Task<object> Run(HttpRequestMessage req, TraceWriter log, Mi
                 outputAsset = _context.Assets.Where(a => a.Id == assetid).FirstOrDefault();
                 log.Info($"Number of retries so far: {loopCount}");
                 if(outputAsset.AssetFiles.Count() == 0) {
-                    Thread.Sleep(1000);
+                    Thread.Sleep(5000);
                 }
                 else
                 {
